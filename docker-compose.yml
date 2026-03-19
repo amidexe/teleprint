@@ -1,0 +1,13 @@
+services:
+  teleprint:
+    build: .
+    restart: unless-stopped
+    # host — обязателен для mDNS и прямого доступа к принтеру в локальной сети
+    network_mode: host
+    env_file: .env
+    environment:
+      DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data
+    tmpfs:
+      - /tmp:size=256m

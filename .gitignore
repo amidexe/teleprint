@@ -1,0 +1,25 @@
+# Секреты — никогда не коммитить
+.env
+users.json
+
+# Бинарники
+/teleprint
+/testprint
+/bin/
+
+# Data директория (users.json внутри)
+/data/
+
+# Go
+*.test
+*.out
+vendor/
+
+# Временные файлы печати
+/tmp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
