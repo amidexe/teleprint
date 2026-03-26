@@ -270,13 +270,9 @@ func (b *Bot) handleNoop(c tele.Context) error {
 // jobFromCallback извлекает PrintJob из payload кнопки.
 func (b *Bot) jobFromCallback(c tele.Context) (*state.PrintJob, bool) {
 	raw := c.Callback().Data
-	slog.Debug("callback data", "raw", fmt.Sprintf("%q", raw))
 	chatID, messageID, ok := parseJobKey(raw)
 	if !ok {
-		slog.Warn("parseJobKey failed", "raw", fmt.Sprintf("%q", raw))
 		return nil, false
 	}
-	job, found := b.cache.Get(chatID, messageID)
-	slog.Debug("cache lookup", "chatID", chatID, "messageID", messageID, "found", found)
-	return job, found
+	return b.cache.Get(chatID, messageID)
 }

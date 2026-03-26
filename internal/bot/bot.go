@@ -51,7 +51,7 @@ func New(cfg *config.Config) (*Bot, error) {
 		cfg:     cfg,
 		access:  access.NewManager(cfg.AdminID, cfg.DataDir),
 		cache:   state.NewCache(cfg.JobTTLMinutes),
-		printer: printer.NewClient(cfg.PrinterHost, cfg.PrinterPort),
+		printer: printer.NewClient(cfg.PrinterHost, cfg.PrinterPort, cfg.PrinterFormat),
 	}
 
 	b.registerHandlers()

@@ -13,8 +13,9 @@ type Config struct {
 	AdminID       int64
 	ProxyURL      string
 
-	PrinterHost string
-	PrinterPort int
+	PrinterHost   string
+	PrinterPort   int
+	PrinterFormat string // urfgray | urfrgb | pdf
 
 	JobTTLMinutes int
 	MaxCopies     int
@@ -67,6 +68,15 @@ func Load() (*Config, error) {
 	}
 
 	cfg.DataDir = os.Getenv("DATA_DIR") // пусто = текущая директория
+
+	// PRINTER_FORMAT: urfgray (по умолчанию), urfrgb, pdf
+	cfg.PrinterFormat = os.Getenv("PRINTER_FORMAT")
+	switch cfg.PrinterFormat {
+	case "urfrgb", "pdf":
+		// ok
+	default:
+		cfg.PrinterFormat = "urfgray"
+	}
 
 	cfg.MaxCopies = 10
 	if mcStr := os.Getenv("MAX_COPIES"); mcStr != "" {

@@ -8,42 +8,64 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"time"
 
 	ipp "github.com/phin1x/go-ipp"
 )
 
 // Client отправляет задания на принтер через IPP.
 type Client struct {
-	host string
-	port int
+	host       string
+	port       int
+	format     string
+	httpClient *http.Client
 }
 
-func NewClient(host string, port int) *Client {
-	return &Client{host: host, port: port}
+// NewClient создаёт клиент. format: "urfgray" | "urfrgb" | "pdf"
+func NewClient(host string, port int, format string) *Client {
+	slog.Info("Формат печати", "format", format)
+	return &Client{
+		host:   host,
+		port:   port,
+		format: format,
+		httpClient: &http.Client{
+			Timeout: 90 * time.Second,
+			Transport: &http.Transport{
+				DisableKeepAlives: true,
+			},
+		},
+	}
 }
 
-// PrintPDF принимает путь к PDF, конвертирует его в URF через Ghostscript
-// и отправляет на принтер.
-// Копии реализованы через повтор страниц в URF-файле, т.к. Brother с AirPrint
-// игнорирует IPP-атрибут copies (статус 1 = ignored).
+// PrintPDF принимает путь к PDF и отправляет на принтер.
 func (c *Client) PrintPDF(pdfPath string, copies int, jobName string) error {
 	if copies < 1 {
 		copies = 1
 	}
-	urfPath, err := pdfToURF(pdfPath, copies)
+
+	switch c.format {
+	case "pdf":
+		return c.sendIPP(pdfPath, "application/pdf", copies, jobName)
+	case "urfrgb":
+		return c.sendViaURF(pdfPath, copies, jobName, false)
+	default: // urfgray
+		return c.sendViaURF(pdfPath, copies, jobName, true)
+	}
+}
+
+// sendViaURF растеризует PDF в URF через Ghostscript и отправляет на принтер.
+// grayscale=true → urfgray 600 DPI; grayscale=false → urfrgb 300 DPI
+func (c *Client) sendViaURF(pdfPath string, copies int, jobName string, grayscale bool) error {
+	urfPath, err := pdfToURF(pdfPath, copies, grayscale)
 	if err != nil {
 		return fmt.Errorf("конвертация PDF→URF: %w", err)
 	}
 	defer os.Remove(urfPath)
-
 	return c.sendIPP(urfPath, "image/urf", 1, jobName)
 }
 
 // pdfToURF конвертирует PDF в Apple Raster (URF) через Ghostscript.
-// 600 DPI, grayscale (принтер B&W), A4.
-// copies реализуется повтором входного файла — Brother с AirPrint игнорирует
-// IPP-атрибут copies, поэтому страницы должны быть физически повторены в файле.
-func pdfToURF(pdfPath string, copies int) (string, error) {
+func pdfToURF(pdfPath string, copies int, grayscale bool) (string, error) {
 	tmp, err := os.CreateTemp("", "teleprint-*.urf")
 	if err != nil {
 		return "", err
@@ -51,11 +73,17 @@ func pdfToURF(pdfPath string, copies int) (string, error) {
 	urfPath := tmp.Name()
 	tmp.Close()
 
-	// Повторяем pdfPath copies раз как аргументы — gs обработает их последовательно
+	device := "urfrgb"
+	dpi := "300"
+	if grayscale {
+		device = "urfgray"
+		dpi = "600"
+	}
+
 	args := []string{
 		"-dSAFER", "-dBATCH", "-dNOPAUSE", "-dNOPROMPT",
-		"-sDEVICE=urfgray",
-		"-r600",
+		fmt.Sprintf("-sDEVICE=%s", device),
+		fmt.Sprintf("-r%s", dpi),
 		"-dDEVICEWIDTHPOINTS=595",
 		"-dDEVICEHEIGHTPOINTS=842",
 		fmt.Sprintf("-sOutputFile=%s", urfPath),
@@ -69,14 +97,10 @@ func pdfToURF(pdfPath string, copies int) (string, error) {
 		os.Remove(urfPath)
 		return "", fmt.Errorf("ghostscript: %w\n%s", err, out)
 	}
-
 	return urfPath, nil
 }
 
 // sendIPP отправляет файл на принтер через IPP Print-Job.
-// Логирует параметры задания для диагностики.
-// Использует прямой HTTP-запрос: go-ipp некорректно обрабатывает
-// IPP статус 1 (successful-ok-ignored-or-substituted-attributes).
 func (c *Client) sendIPP(filePath, mimeType string, copies int, jobName string) error {
 	printerURL := fmt.Sprintf("http://%s:%d/ipp/print", c.host, c.port)
 	printerURI := fmt.Sprintf("ipp://%s:%d/ipp/print", c.host, c.port)
@@ -99,9 +123,8 @@ func (c *Client) sendIPP(filePath, mimeType string, copies int, jobName string) 
 	req.OperationAttributes[ipp.AttributeRequestingUserName] = "teleprint"
 	req.OperationAttributes[ipp.AttributeDocumentFormat] = mimeType
 	req.OperationAttributes["job-name"] = jobName
-	// copies — Job Template атрибут, не Operation
 	req.JobAttributes["copies"] = copies
-	slog.Info("IPP задание", "jobName", jobName, "copies", copies, "mime", mimeType)
+	slog.Info("IPP задание", "jobName", jobName, "copies", copies, "format", mimeType)
 
 	headerBytes, err := req.Encode()
 	if err != nil {
@@ -116,7 +139,7 @@ func (c *Client) sendIPP(filePath, mimeType string, copies int, jobName string) 
 	httpReq.Header.Set("Content-Type", "application/ipp")
 	httpReq.ContentLength = int64(len(headerBytes)) + fi.Size()
 
-	httpResp, err := http.DefaultClient.Do(httpReq)
+	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("HTTP: %w", err)
 	}
@@ -136,16 +159,10 @@ func (c *Client) sendIPP(filePath, mimeType string, copies int, jobName string) 
 		return fmt.Errorf("декодирование IPP ответа: %w", err)
 	}
 
-	// Статусы 0-2 = успех (0=ok, 1=ok-ignored-attrs, 2=ok-conflicting-attrs)
 	if ippResp.StatusCode > 2 {
 		return fmt.Errorf("IPP ошибка статус %d (0x%04X)", ippResp.StatusCode, ippResp.StatusCode)
 	}
 
 	slog.Info("IPP ответ принтера", "status", ippResp.StatusCode)
-	for _, attrs := range ippResp.JobAttributes {
-		for k, v := range attrs {
-			slog.Info("job attr", "key", k, "value", fmt.Sprintf("%v", v))
-		}
-	}
 	return nil
 }
