@@ -1,6 +1,6 @@
 services:
   teleprint:
-    build: .
+    image: amidexe/teleprint:latest
     restart: unless-stopped
     # host — обязателен для mDNS и прямого доступа к принтеру в локальной сети
     network_mode: host
