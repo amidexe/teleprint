@@ -20,4 +20,4 @@ services:
   #   image: gotenberg/gotenberg:8
   #   restart: unless-stopped
   #   network_mode: host
-  #   command: gotenberg --api-disable-chromium
+  #   command: gotenberg --chromium-disable-routes
