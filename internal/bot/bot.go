@@ -16,11 +16,12 @@ import (
 
 // Bot объединяет все зависимости.
 type Bot struct {
-	tele    *tele.Bot
-	cfg     *config.Config
-	access  *access.Manager
-	cache   *state.Cache
-	printer *printer.Client
+	tele         *tele.Bot
+	cfg          *config.Config
+	access       *access.Manager
+	cache        *state.Cache
+	printer      *printer.Client
+	gotenbergURL string // пусто = конвертация office отключена
 }
 
 func New(cfg *config.Config) (*Bot, error) {
@@ -47,11 +48,16 @@ func New(cfg *config.Config) (*Bot, error) {
 	}
 
 	b := &Bot{
-		tele:    bot,
-		cfg:     cfg,
-		access:  access.NewManager(cfg.AdminID, cfg.DataDir),
-		cache:   state.NewCache(cfg.JobTTLMinutes),
-		printer: printer.NewClient(cfg.PrinterHost, cfg.PrinterPort, cfg.PrinterFormat),
+		tele:         bot,
+		cfg:          cfg,
+		access:       access.NewManager(cfg.AdminID, cfg.DataDir),
+		cache:        state.NewCache(cfg.JobTTLMinutes),
+		printer:      printer.NewClient(cfg.PrinterHost, cfg.PrinterPort, cfg.PrinterFormat),
+		gotenbergURL: cfg.GotenbergURL,
+	}
+
+	if b.gotenbergURL != "" {
+		slog.Info("Конвертация офисных документов включена", "gotenberg", b.gotenbergURL)
 	}
 
 	b.registerHandlers()

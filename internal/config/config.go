@@ -20,6 +20,7 @@ type Config struct {
 	JobTTLMinutes int
 	MaxCopies     int
 	DataDir       string // директория для users.json
+	GotenbergURL  string // URL Gotenberg для конвертации office → PDF (пусто = отключено)
 }
 
 func Load() (*Config, error) {
@@ -85,6 +86,8 @@ func Load() (*Config, error) {
 			cfg.MaxCopies = mc
 		}
 	}
+
+	cfg.GotenbergURL = os.Getenv("GOTENBERG_URL")
 
 	return cfg, nil
 }

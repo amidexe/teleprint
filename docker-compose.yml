@@ -7,7 +7,17 @@ services:
     env_file: .env
     environment:
       DATA_DIR: /app/data
+      # Раскомментируйте для поддержки офисных документов (docx, xlsx, pptx и др.)
+      # GOTENBERG_URL: http://localhost:3000
     volumes:
       - ./data:/app/data
     tmpfs:
       - /tmp:size=256m
+
+  # --- Опционально: конвертация офисных документов ---
+  # Раскомментируйте для поддержки DOCX, XLSX, PPTX, ODT и др.
+  # gotenberg:
+  #   image: gotenberg/gotenberg:8
+  #   restart: unless-stopped
+  #   network_mode: host
+  #   command: gotenberg --api-disable-chromium

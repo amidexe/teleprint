@@ -24,11 +24,30 @@ func (b *Bot) handleDocument(c tele.Context) error {
 		return nil
 	}
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(doc.FileName), "."))
-	switch ext {
-	case "pdf", "jpg", "jpeg", "png":
+
+	officeExts := map[string]bool{
+		"docx": true, "doc": true, "xlsx": true, "xls": true,
+		"pptx": true, "ppt": true, "odt": true, "ods": true,
+		"odp": true, "rtf": true,
+	}
+
+	switch {
+	case ext == "pdf" || ext == "jpg" || ext == "jpeg" || ext == "png":
+		// поддерживается всегда
+	case officeExts[ext]:
+		if b.gotenbergURL == "" {
+			return c.Send(
+				"❌ Конвертация офисных документов не настроена.\n\n"+
+					"Администратору: задайте `GOTENBERG_URL` в конфигурации.",
+				&tele.SendOptions{ParseMode: tele.ModeMarkdown})
+		}
 	default:
+		supported := "PDF, JPG, PNG"
+		if b.gotenbergURL != "" {
+			supported += ", DOCX, DOC, XLSX, XLS, PPTX, PPT, ODT, ODS, ODP, RTF"
+		}
 		return c.Send(fmt.Sprintf(
-			"❌ Формат *.%s* не поддерживается.\n\nПоддерживаются: PDF, JPG, PNG", ext),
+			"❌ Формат *.%s* не поддерживается.\n\nПоддерживаются: %s", ext, supported),
 			&tele.SendOptions{ParseMode: tele.ModeMarkdown})
 	}
 	return b.processFile(c, doc.FileID, doc.FileName, ext, 0, 0)
@@ -234,6 +253,20 @@ func (b *Bot) doPrint(c tele.Context, job *state.PrintJob) {
 	defer os.Remove(job.TempPath)
 
 	pdfPath := job.TempPath
+
+	// Если офисный документ — конвертируем через Gotenberg
+	if job.IsOffice() {
+		converted, err := converter.OfficeToPDF(b.gotenbergURL, job.TempPath)
+		if err != nil {
+			slog.Error("Ошибка конвертации office→PDF", "err", err, "file", job.FileName)
+			_, _ = c.Bot().Send(c.Recipient(),
+				fmt.Sprintf("❌ Ошибка конвертации документа:\n`%v`", err),
+				&tele.SendOptions{ParseMode: tele.ModeMarkdown})
+			return
+		}
+		defer os.Remove(converted)
+		pdfPath = converted
+	}
 
 	// Если изображение — конвертируем в PDF
 	if job.IsImage() {

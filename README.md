@@ -12,6 +12,7 @@ CUPS — мощная система, но избыточная для зада�
 
 - Печать **PDF** — напрямую на принтер без конвертации (если принтер поддерживает)
 - Печать **JPG / PNG** — автоматическая конвертация в PDF с подбором ориентации
+- Печать **офисных документов** — DOCX, XLSX, PPTX, ODT и др. (опционально, через Gotenberg)
 - Поворот изображения на 90°
 - Масштаб: 25% / 50% / 75% / 100%
 - Количество копий (настраивается)
@@ -50,6 +51,7 @@ PROXY_URL=socks5://127.0.0.1:1080 # Прокси для Telegram API
 JOB_TTL_MINUTES=15                # Время жизни сессии (минуты)
 MAX_COPIES=10                     # Максимум копий
 DATA_DIR=/app/data                # Папка для users.json
+GOTENBERG_URL=http://localhost:3000 # URL Gotenberg (опционально, для офисных документов)
 ```
 
 ### Выбор PRINTER_FORMAT
@@ -64,6 +66,35 @@ DATA_DIR=/app/data                # Папка для users.json
 - Посмотрите спецификацию принтера: есть ли поддержка AirPrint и PDF через IPP
 - Попробуйте `pdf` — если не печатает, переходите на `urfgray` или `urfrgb`
 - Чёрно-белый принтер → `urfgray` почти всегда правильный выбор
+
+### Офисные документы (опционально)
+
+Для печати DOCX, XLSX, PPTX и других офисных форматов нужен [Gotenberg](https://gotenberg.dev/) — сервис конвертации документов в PDF. Образ скачивается автоматически с Docker Hub при первом запуске.
+
+**Как включить:**
+
+1. Раскомментируйте секцию `gotenberg` в `docker-compose.yml`
+2. Раскомментируйте `GOTENBERG_URL` там же
+3. `docker compose up -d` — Docker сам скачает образ Gotenberg и запустит оба контейнера
+
+Поддерживаемые форматы: `.docx`, `.doc`, `.xlsx`, `.xls`, `.pptx`, `.ppt`, `.odt`, `.ods`, `.odp`, `.rtf`
+
+Без `GOTENBERG_URL` бот работает как раньше — только PDF, JPG, PNG.
+
+**Требования к ресурсам:**
+
+Gotenberg использует LibreOffice внутри, поэтому потребляет заметно больше памяти:
+
+| Состояние | RAM |
+|-----------|-----|
+| В простое | ~300–500 MB |
+| При конвертации | до 1–1.5 GB |
+
+Рекомендуется **минимум 4 GB RAM** на машине для стабильной работы обоих контейнеров. Если на сервере всего 2 GB — варианты:
+
+- **Поднять RAM** на виртуалке до 4 GB (самый простой путь)
+- **Запускать Gotenberg по необходимости** — `docker compose up -d gotenberg` когда нужно распечатать документ, затем `docker compose stop gotenberg`
+- **Вынести Gotenberg на другую машину** — указать её адрес в `GOTENBERG_URL` (например `http://192.168.1.50:3000`)
 
 ### Как узнать IP принтера
 
@@ -85,7 +116,7 @@ DATA_DIR=/app/data                # Папка для users.json
 
 ## Использование
 
-1. Отправьте боту PDF, фото или изображение
+1. Отправьте боту PDF, фото или изображение (а также DOCX, XLSX, PPTX если Gotenberg включён)
 2. Настройте параметры кнопками:
 
 ```
@@ -106,7 +137,7 @@ teleprint/
     ├── access/             # Белый список пользователей (users.json)
     ├── bot/                # Telegram-бот, хендлеры, inline-кнопки
     ├── config/             # Загрузка .env
-    ├── converter/          # JPG/PNG → PDF (масштаб, поворот)
+    ├── converter/          # JPG/PNG → PDF, Office → PDF (через Gotenberg)
     ├── printer/            # IPP-клиент + Ghostscript (PDF → URF)
     └── state/              # In-memory кэш заданий с TTL
 ```
@@ -115,6 +146,7 @@ teleprint/
 - PDF + `PRINTER_FORMAT=pdf` → принтер напрямую
 - PDF + `PRINTER_FORMAT=urfgray/urfrgb` → Ghostscript → URF → принтер
 - JPG/PNG → fpdf (PDF) → далее по схеме выше
+- DOCX/XLSX/PPTX/ODT... → Gotenberg (PDF) → далее по схеме выше
 
 ## Технический стек
 
@@ -124,6 +156,7 @@ teleprint/
 | IPP протокол | [go-ipp](https://github.com/phin1x/go-ipp) |
 | PDF → URF | [Ghostscript](https://www.ghostscript.com/) |
 | Image → PDF | [go-pdf/fpdf](https://github.com/go-pdf/fpdf) |
+| Office → PDF | [Gotenberg](https://gotenberg.dev/) (опционально) |
 
 ## Docker Compose
 

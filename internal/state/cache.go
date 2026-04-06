@@ -31,6 +31,14 @@ func (j *PrintJob) IsImage() bool {
 	return j.FileType == "jpg" || j.FileType == "jpeg" || j.FileType == "png"
 }
 
+func (j *PrintJob) IsOffice() bool {
+	switch j.FileType {
+	case "docx", "doc", "xlsx", "xls", "pptx", "ppt", "odt", "ods", "odp", "rtf":
+		return true
+	}
+	return false
+}
+
 // Cache — потокобезопасный in-memory кэш заданий печати с TTL.
 type Cache struct {
 	mu  sync.RWMutex
